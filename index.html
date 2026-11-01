@@ -30,6 +30,55 @@
       </button>
     </header>
 
+
+    <!-- API Key Guide -->
+    <section id="keyGuide" class="glass p-6 rounded-xl space-y-4">
+      <div class="flex items-center gap-2">
+        <span class="px-2.5 py-1 bg-violet-500/20 text-violet-300 font-bold rounded text-sm">はじめに</span>
+        <h2 class="text-xl font-bold">🔰 APIキーの取得方法（3種類）</h2>
+      </div>
+      <div class="text-sm text-slate-300 space-y-1">
+        <p>どれも<strong>従量課金</strong>で、先にクレジットカードを登録して残高をチャージしておく必要があります。ChatGPT Plus や Claude Pro などの月額サブスクリプションでは<strong>API料金はまかなえません</strong>（別契約です）。</p>
+        <p>必要なのは用途に応じたキーだけです：<span class="text-sky-300">①は任意</span>（ChatGPT等で作った画像を読み込むなら不要）、<span class="text-amber-300">②はSTEP 2</span>、<span class="text-emerald-300">③はSTEP 3–4</span>で使います。</p>
+        <p class="text-xs text-slate-400">キーは作成直後の1回しか表示されないことが多いので、すぐコピーして下の「⚙️ APIキー設定」に貼り付け、パスワード管理ソフト等に保管してください。キーを他人に渡したり、SNSや資料に貼ったりしないでください。</p>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm">
+        <details class="bg-slate-900/70 border border-slate-700 rounded-lg p-4" open>
+          <summary class="cursor-pointer font-semibold text-emerald-300">③ fal.ai（動画化：Seedance / Kling / Hailuo）</summary>
+          <ol class="list-decimal ml-5 mt-3 space-y-1.5 text-slate-300">
+            <li><a href="https://fal.ai/" target="_blank" rel="noopener" class="text-sky-400 underline">fal.ai</a> 右上の「Sign in」から、GitHub か Google アカウントでログイン（新規登録も同じ画面）。</li>
+            <li>画面左上のアカウント名が<strong>自分の個人アカウント</strong>（またはチーム）になっていることを確認。キーはここで選んだアカウントに紐づきます。</li>
+            <li><a href="https://fal.ai/dashboard/billing" target="_blank" rel="noopener" class="text-sky-400 underline">Billing</a> でクレジットカードを登録し、クレジットを購入（まず数ドル〜10ドル程度で十分）。<span class="text-slate-400">残高がないと、キーが正しくても動画生成で「残高不足」系のエラーになります。</span></li>
+            <li><a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener" class="text-sky-400 underline">Dashboard → Keys</a> を開き「<strong>Add key</strong>」（Create key）をクリック。</li>
+            <li>名前（例：storyboard-studio）を入れ、権限（Scope）は「<strong>API</strong>」を選んで作成。</li>
+            <li>表示されたキーを<strong>全部</strong>コピー。<code class="text-xs bg-slate-800 px-1 rounded">xxxxxxxx-xxxx-…:xxxxxxxx</code> のように<strong>コロン「:」の前後が1本のキー</strong>です。片方だけだと認証エラーになります。</li>
+          </ol>
+          <p class="text-xs text-slate-400 mt-3">目安：Seedance Lite は1カット数十円程度、Pro・Kling はその数倍です。料金は各モデルのページで確認でき、変わることがあります。まず Lite で1カット試すのがおすすめです。</p>
+        </details>
+        <details class="bg-slate-900/70 border border-slate-700 rounded-lg p-4" open>
+          <summary class="cursor-pointer font-semibold text-amber-300">② Anthropic / Claude（STEP 2 プロンプト生成）</summary>
+          <ol class="list-decimal ml-5 mt-3 space-y-1.5 text-slate-300">
+            <li><a href="https://console.anthropic.com/" target="_blank" rel="noopener" class="text-sky-400 underline">Claude Console（console.anthropic.com）</a>にアクセスし、メールアドレスか Google でアカウント作成・ログイン。<span class="text-slate-400">claude.ai とは別のアカウント・別料金です。</span></li>
+            <li>左メニューの「<strong>Billing</strong>（Plans &amp; Billing）」でカードを登録し、クレジットを購入（最低5ドル程度から）。</li>
+            <li>「<strong>API Keys</strong>」→「<strong>Create Key</strong>」で名前を付けて作成。</li>
+            <li><code class="text-xs bg-slate-800 px-1 rounded">sk-ant-</code> で始まるキーをコピー。</li>
+          </ol>
+          <p class="text-xs text-slate-400 mt-3">目安：9コマ解析1回あたり10円前後（Sonnet ならさらに安め）。モデル名でエラーが出たら、STEP 2 の入力欄に Console の Models 一覧にある最新IDを入れてください。</p>
+        </details>
+        <details class="bg-slate-900/70 border border-slate-700 rounded-lg p-4" open>
+          <summary class="cursor-pointer font-semibold text-sky-300">① OpenAI（STEP 1 絵コンテ画像の自動生成・任意）</summary>
+          <ol class="list-decimal ml-5 mt-3 space-y-1.5 text-slate-300">
+            <li><a href="https://platform.openai.com/" target="_blank" rel="noopener" class="text-sky-400 underline">OpenAI Platform（platform.openai.com）</a>にログイン。<span class="text-slate-400">ChatGPT のアカウントで入れますが、料金は別です。</span></li>
+            <li>右上の歯車 →「<strong>Billing</strong>」でカードを登録し、クレジットを購入（最低5ドル程度から）。</li>
+            <li>画像モデル <code class="text-xs bg-slate-800 px-1 rounded">gpt-image-1</code> は<strong>組織の本人確認（Organization verification）</strong>が必要です。Settings → Organization → General の「Verify Organization」から、身分証の撮影などで認証してください（反映まで少し時間がかかることがあります）。</li>
+            <li>「<strong>API keys</strong>」→「<strong>Create new secret key</strong>」で作成し、<code class="text-xs bg-slate-800 px-1 rounded">sk-</code> で始まるキーをコピー。</li>
+          </ol>
+          <p class="text-xs text-slate-400 mt-3">本人確認が面倒な場合は、ChatGPT（有料プラン）で「📋 ChatGPT用プロンプトをコピー」の文面を使って画像を作り、STEP 1 で読み込めば①のキーは不要です。</p>
+        </details>
+      </div>
+      <p class="text-xs text-slate-400">うまく接続できないとき：大学・病院のネットワークや広告ブロッカー等の拡張機能が通信を止めていることがあります。シークレットウィンドウや別の回線で試してください。</p>
+    </section>
+
     <!-- API Keys Modal / Panel -->
     <section id="settingsPanel" class="glass p-6 rounded-xl space-y-4 hidden">
       <div class="flex justify-between items-center">
@@ -38,7 +87,7 @@
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
         <div>
-          <label class="block text-slate-300 mb-1">① OpenAI API Key (絵コンテ画像生成)</label>
+          <label class="block text-slate-300 mb-1">① OpenAI API Key (絵コンテ画像生成・任意)</label>
           <input type="password" id="openaiKey" placeholder="sk-..." class="w-full p-2.5 rounded bg-slate-900 border border-slate-700 text-white">
         </div>
         <div>
@@ -47,9 +96,10 @@
         </div>
         <div>
           <label class="block text-slate-300 mb-1">③ fal.ai / 動画統合API Key (Seedance等)</label>
-          <input type="password" id="falKey" placeholder="fal_key_..." class="w-full p-2.5 rounded bg-slate-900 border border-slate-700 text-white">
+          <input type="password" id="falKey" placeholder="xxxxxxxx-xxxx-…:xxxxxxxx（コロン含め全部）" class="w-full p-2.5 rounded bg-slate-900 border border-slate-700 text-white">
         </div>
       </div>
+      <p class="text-xs text-slate-400">※キーの取り方は下の「🔰 APIキーの取得方法」を参照してください。</p>
       <p class="text-xs text-slate-400">※キーは各機能の実行時に、OpenAI・Anthropic・fal.ai の各APIへ直接送られます。共用PCでは使用後に「キーを消去」してください。</p>
       <button onclick="clearApiKeys()" class="px-3 py-1 bg-rose-600/30 hover:bg-rose-600/50 border border-rose-500/40 rounded text-xs">🗑 キーを消去</button>
       <p class="text-xs text-slate-400">※APIを使わず手持ちの3×3画像をドラッグ＆ドロップして9分割＆プロンプト管理を行うことも可能です。</p>
