@@ -179,12 +179,27 @@
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div class="flex items-center gap-2">
           <span class="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 font-bold rounded text-sm">STEP 3 & 4</span>
-          <h2 class="text-xl font-bold">9カット分割ボード ＆ 動画生成（Seedance / Kling / Hailuo）</h2>
+          <h2 class="text-xl font-bold">9カット分割ボード ＆ 動画生成（Seedance / Veo / Kling / Hailuo）</h2>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <label class="text-sm text-slate-300">音声:</label>
+          <select id="audioMode" onchange="onAudioModeChange()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-pink-300 font-medium">
+            <option value="silent">🔇 無音</option>
+            <option value="ambient">🔊 環境音・効果音のみ</option>
+            <option value="dialogue" selected>🗣 環境音＋セリフ</option>
+          </select>
+          <label class="text-sm text-slate-300">長さ:</label>
+          <select id="cutDuration" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-200">
+            <option value="4">約4秒</option>
+            <option value="5" selected>約5秒</option>
+            <option value="6">約6秒</option>
+            <option value="8">約8秒</option>
+          </select>
           <label class="text-sm text-slate-300">使用動画モデル:</label>
-          <input id="videoModel" list="videoModelList" value="fal-ai/bytedance/seedance/v1/pro/image-to-video" title="fal.aiのエンドポイントIDは直接編集できます" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-medium w-80">
+          <input id="videoModel" list="videoModelList" value="fal-ai/bytedance/seedance/v1.5/pro/image-to-video" oninput="onAudioModeChange()" title="fal.aiのエンドポイントIDは直接編集できます" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-medium w-80">
           <datalist id="videoModelList">
+            <option value="fal-ai/bytedance/seedance/v1.5/pro/image-to-video">Seedance 1.5 Pro（音声・セリフ対応／本命）</option>
+            <option value="fal-ai/veo3.1/fast/image-to-video">Veo 3.1 Fast（音声・セリフ対応／高品質・高め）</option>
             <option value="fal-ai/bytedance/seedance/v1/pro/image-to-video">Seedance 1.0 Pro (高一貫性・本命)</option>
             <option value="fal-ai/bytedance/seedance/v1/lite/image-to-video">Seedance 1.0 Lite (高速・低コスト検証用)</option>
             <option value="fal-ai/kling-video/v2/master/image-to-video">Kling 2.0 Master (シネマティック)</option>
@@ -195,11 +210,33 @@
           </button>
         </div>
       </div>
+      <p id="audioHint" class="text-xs text-slate-400"></p>
 
       <!-- 3x3 Cards Container -->
       <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <!-- JS will populate 9 cards here -->
       </div>
+    </section>
+
+    <!-- STEP 5: Join -->
+    <section class="glass p-6 rounded-xl space-y-4">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div class="flex items-center gap-2">
+          <span class="px-2.5 py-1 bg-rose-500/20 text-rose-300 font-bold rounded text-sm">STEP 5</span>
+          <h2 class="text-xl font-bold">完成したカットを1本の動画に結合</h2>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <button onclick="downloadAllVideos()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-sm">💾 カット動画を一括保存</button>
+          <label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" id="joinWithAudio" checked class="accent-pink-500"> 音声も含める</label>
+          <button onclick="joinVideos()" id="btnJoin" class="px-5 py-2 bg-gradient-to-r from-rose-500 to-pink-600 hover:opacity-90 rounded-lg font-semibold text-sm">🎞 Cut 1→9 の順に1本へ結合</button>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400">
+        ※動画化が完了したカットだけを番号順につなぎます（未完成のカットは飛ばします）。ブラウザ内で再生しながら記録するため、合計の再生時間と同じくらい時間がかかります（9カット×5秒なら約45秒）。結合中はこのタブを前面に表示したままにしてください。<br>
+        ※ブラウザによって MP4 か WebM で保存されます。BGM・テロップ・トランジションを付けたい場合は、「一括保存」した cut_01〜09 を Windows の Clipchamp や CapCut に読み込んで編集してください。
+      </p>
+      <div id="joinStatus" class="text-sm text-slate-300"></div>
+      <video id="joinedVideo" class="w-full max-w-3xl rounded-lg hidden" controls></video>
     </section>
   </div>
 
@@ -215,6 +252,7 @@
     window.addEventListener('DOMContentLoaded', () => {
       loadApiKeys();
       renderCardsGrid();
+      onAudioModeChange();
     });
 
     function toggleSettings() {
@@ -278,6 +316,14 @@
               </select>
               <label class="block text-xs text-slate-400 mb-1">動画プロンプト (Claude出力 / 編集可)</label>
               <textarea id="prompt-${i}" rows="3" placeholder="ここにCut #${i + 1}の動きのプロンプトが入ります..." class="w-full p-2 rounded bg-slate-950 border border-slate-800 text-xs text-slate-200"></textarea>
+              <div class="audio-field">
+                <label class="block text-xs text-slate-400 mb-1 mt-2">🔊 環境音・効果音（英語推奨）</label>
+                <input id="sound-${i}" placeholder="例: quiet night room ambience, soft crayon scratching" class="w-full p-2 rounded bg-slate-950 border border-slate-800 text-xs text-slate-200">
+              </div>
+              <div class="dialogue-field">
+                <label class="block text-xs text-slate-400 mb-1 mt-2">🗣 セリフ（空欄なら発話なし）</label>
+                <input id="dialogue-${i}" placeholder='例: パパ:「…ありがとう」' class="w-full p-2 rounded bg-slate-950 border border-slate-800 text-xs text-slate-200">
+              </div>
             </div>
             <button onclick="generateSingleVideo(${i})" id="btn-vid-${i}" class="mt-auto w-full py-2 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg text-xs font-semibold transition">
               ▶️ このカットを動画化 (Seedance)
@@ -428,9 +474,14 @@
 添付された3×3（9コマ）のストーリーボード画像を左上（1コマ目）から右下（9コマ目）まで順番に解析し、SeedanceやHiggsfield等のImage-to-Videoモデルに入力するための英語の動画生成プロンプトを作成してください。
 必ず以下の純粋なJSON配列フォーマットのみで出力してください（解説文やMarkdownコードブロックは不要）：
 [
-  {"cut": 1, "prompt": "英語の具体的なモーション・表情・照明・カメラワーク指示（日本語の簡単な補足）"},
+  {"cut": 1, "prompt": "英語の具体的なモーション・表情・照明・カメラワーク指示（日本語の簡単な補足）", "sound": "英語の環境音・効果音の説明（例: quiet night room ambience, soft crayon scratching）", "dialogue": "日本語のセリフ。形式は 話者:「セリフ」。不要なら空文字"},
   ...9コマ分
-]`;
+]
+セリフのルール：
+- 物語上自然な場面だけに入れ、9コマ中2〜4コマ程度に絞る（無言のコマが多くてよい）
+- 1コマ1人・1文、日本語で15文字程度まで（5秒前後で言い切れる長さ）
+- 話者は絵コンテ上で口元が見える人物にする。赤ちゃんなど話せない人物は「あー」「うー」など声だけにする
+- promptにはセリフ本文を書かない（セリフはdialogueにのみ書く）`;
 
         const res = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -465,7 +516,9 @@
 
         promptsArray.forEach((item, idx) => {
           if (idx < 9) {
-            document.getElementById(`prompt-${idx}`).value = item.prompt;
+            document.getElementById(`prompt-${idx}`).value = item.prompt || '';
+            document.getElementById(`sound-${idx}`).value = item.sound || '';
+            document.getElementById(`dialogue-${idx}`).value = item.dialogue || '';
             document.getElementById(`status-${idx}`).innerText = 'プロンプト準備完了';
           }
         });
@@ -489,8 +542,12 @@
 
       const camPrompt = document.getElementById(`cam-${index}`).value;
       const motionPrompt = document.getElementById(`prompt-${index}`).value;
-      const fullPrompt = `${camPrompt}. ${motionPrompt}`;
-      const endpoint = document.getElementById('videoModel').value;
+      const endpoint = document.getElementById('videoModel').value.trim();
+      const mode = document.getElementById('audioMode').value;
+      const sound = document.getElementById(`sound-${index}`).value.trim();
+      const dialogue = document.getElementById(`dialogue-${index}`).value.trim();
+      const native = supportsNativeAudio(endpoint);
+      const fullPrompt = buildVideoPrompt(camPrompt, motionPrompt, mode, sound, dialogue, native);
 
       const statusEl = document.getElementById(`status-${index}`);
       const btnEl = document.getElementById(`btn-vid-${index}`);
@@ -498,36 +555,26 @@
       statusEl.innerHTML = `<span class="text-amber-400">⏳ 動画生成中...</span>`;
 
       try {
-        // 動画生成は数分かかるため、同期API(fal.run)ではなくキューAPIで投入→ポーリング
-        const headers = { 'Content-Type': 'application/json', 'Authorization': `Key ${falKey}` };
-        const submit = await fetch(`https://queue.fal.run/${endpoint}`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ prompt: fullPrompt, image_url: imageUrl })
-        });
-        const job = await submit.json();
-        if (!submit.ok) throw new Error(formatFalError(job));
+        const input = { prompt: fullPrompt, image_url: imageUrl };
+        const dur = durationParam(endpoint, Number(document.getElementById('cutDuration').value));
+        if (dur !== undefined) input.duration = dur;
+        if (native) input.generate_audio = mode !== 'silent';
 
-        const statusUrl = job.status_url || `https://queue.fal.run/${endpoint}/requests/${job.request_id}/status`;
-        const responseUrl = job.response_url || `https://queue.fal.run/${endpoint}/requests/${job.request_id}`;
-        const started = Date.now();
-        while (true) {
-          await new Promise(r => setTimeout(r, 5000));
-          const st = await (await fetch(statusUrl, { headers })).json();
-          const sec = Math.round((Date.now() - started) / 1000);
-          if (st.status === 'COMPLETED') break;
-          if (st.status === 'IN_QUEUE') statusEl.innerHTML = `<span class="text-amber-400">⏳ 順番待ち ${st.queue_position ?? ''} (${sec}秒)</span>`;
-          else if (st.status === 'IN_PROGRESS') statusEl.innerHTML = `<span class="text-amber-400">⏳ 生成中 (${sec}秒)</span>`;
-          else if (st.error) throw new Error(st.error);
-          if (sec > 900) throw new Error('15分以上応答がないため打ち切りました');
-        }
-
-        const resultRes = await fetch(responseUrl, { headers });
-        const data = await resultRes.json();
-        if (!resultRes.ok) throw new Error(formatFalError(data));
-
-        const videoUrl = data.video?.url || data.video_url;
+        const data = await falQueue(endpoint, input, falKey, (label, sec) =>
+          statusEl.innerHTML = `<span class="text-amber-400">⏳ ${label} (${sec}秒)</span>`);
+        let videoUrl = data.video?.url || data.video_url;
         if (!videoUrl) throw new Error('動画URLが返されませんでした');
+
+        // 音声非対応モデル＋音声ありの場合は、MMAudioで映像に合う環境音・効果音を後付け（セリフは不可）
+        if (!native && mode !== 'silent') {
+          const seconds = await getVideoDuration(videoUrl).catch(() => 5);
+          const audioPrompt = sound || `natural ambient sound matching the scene: ${motionPrompt}`.slice(0, 400);
+          const withAudio = await falQueue('fal-ai/mmaudio-v2', {
+            video_url: videoUrl, prompt: audioPrompt,
+            negative_prompt: 'speech, talking, music, distortion', duration: Math.min(30, Math.max(1, seconds))
+          }, falKey, (label, sec) => statusEl.innerHTML = `<span class="text-amber-400">🔊 音付け${label} (${sec}秒)</span>`);
+          videoUrl = withAudio.video?.url || videoUrl;
+        }
         const vidEl = document.getElementById(`cut-vid-${index}`);
         const imgEl = document.getElementById(`cut-img-${index}`);
         vidEl.src = videoUrl;
@@ -547,6 +594,79 @@
       } finally {
         btnEl.disabled = false;
       }
+    }
+
+    // 音声を動画と同時生成できるモデル（generate_audio パラメータ対応）
+    function supportsNativeAudio(endpoint) {
+      return /veo3|seedance\/v1\.5|seedance\/v2|sora-2|kling-video\/v2\.6|kling-video\/v3/i.test(endpoint);
+    }
+    // モデルごとに受け付ける長さの形式が違うため変換
+    function durationParam(endpoint, s) {
+      if (/veo3/i.test(endpoint)) return s <= 4 ? '4s' : s <= 6 ? '6s' : '8s';
+      if (/seedance\/v1\.5|seedance\/v2/i.test(endpoint)) return String(Math.min(12, Math.max(4, s)));
+      if (/seedance\/v1\//i.test(endpoint) || /kling-video/i.test(endpoint)) return s <= 7 ? '5' : '10';
+      return undefined; // Hailuo等は指定しない（モデル既定）
+    }
+    function buildVideoPrompt(cam, motion, mode, sound, dialogue, native) {
+      let p = `${cam}. ${motion}`.trim();
+      if (!native) return p; // 音声非対応モデルには映像指示のみ
+      if (mode === 'silent') return p;
+      p += sound ? `\nAudio: ${sound}.` : '\nAudio: natural ambient sound that matches the scene.';
+      if (mode === 'dialogue' && dialogue) {
+        const m = dialogue.match(/^(.+?)\s*[:：]\s*(.+)$/);
+        const speaker = m ? m[1] : 'Character';
+        const line = (m ? m[2] : dialogue).replace(/^[「"]|[」"]$/g, '');
+        p += `\nDialogue (spoken in Japanese, natural lip-sync): ${speaker}: "${line}"`;
+      } else {
+        p += '\nNo dialogue, no speech, no narration.';
+      }
+      p += '\nNo background music, no subtitles.';
+      return p;
+    }
+    // fal.ai キューAPI：投入→ポーリング→結果取得
+    async function falQueue(endpoint, input, falKey, onStatus) {
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Key ${falKey}` };
+      const submit = await fetch(`https://queue.fal.run/${endpoint}`, { method: 'POST', headers, body: JSON.stringify(input) });
+      const job = await submit.json();
+      if (!submit.ok) throw new Error(formatFalError(job));
+      const statusUrl = job.status_url || `https://queue.fal.run/${endpoint}/requests/${job.request_id}/status`;
+      const responseUrl = job.response_url || `https://queue.fal.run/${endpoint}/requests/${job.request_id}`;
+      const started = Date.now();
+      while (true) {
+        await new Promise(r => setTimeout(r, 5000));
+        const st = await (await fetch(statusUrl, { headers })).json();
+        const sec = Math.round((Date.now() - started) / 1000);
+        if (st.status === 'COMPLETED') break;
+        if (st.status === 'IN_QUEUE') onStatus(`順番待ち ${st.queue_position ?? ''}`, sec);
+        else if (st.status === 'IN_PROGRESS') onStatus('生成中', sec);
+        else if (st.error) throw new Error(st.error);
+        if (sec > 900) throw new Error('15分以上応答がないため打ち切りました');
+      }
+      const resultRes = await fetch(responseUrl, { headers });
+      const data = await resultRes.json();
+      if (!resultRes.ok) throw new Error(formatFalError(data));
+      return data;
+    }
+    function getVideoDuration(url) {
+      return new Promise((ok, ng) => {
+        const v = document.createElement('video');
+        v.preload = 'metadata';
+        v.onloadedmetadata = () => ok(isFinite(v.duration) ? v.duration : 5);
+        v.onerror = ng;
+        v.src = url;
+      });
+    }
+    function onAudioModeChange() {
+      const mode = document.getElementById('audioMode').value;
+      const native = supportsNativeAudio(document.getElementById('videoModel').value);
+      document.querySelectorAll('.audio-field').forEach(el => el.classList.toggle('hidden', mode === 'silent'));
+      document.querySelectorAll('.dialogue-field').forEach(el => el.classList.toggle('hidden', mode !== 'dialogue'));
+      const hint = document.getElementById('audioHint');
+      if (mode === 'silent') hint.textContent = '無音で生成します（音声対応モデルでも音声生成をオフにし、料金も安くなります）。';
+      else if (native) hint.textContent = mode === 'dialogue'
+        ? 'このモデルは映像と同時に環境音・セリフを生成します。セリフ欄が空のカットは発話なしになります。日本語の発音や口の動きはモデルにより精度が異なるため、1カットで試してから一括生成してください。'
+        : 'このモデルは映像と同時に環境音・効果音を生成します（セリフなし）。';
+      else hint.textContent = '⚠ このモデルは音声を生成できないため、完成後に MMAudio で環境音・効果音だけを後付けします（セリフは入りません）。セリフが必要なら Seedance 1.5 Pro か Veo 3.1 Fast を選んでください。';
     }
 
     function toCompactJpeg(img, maxSide) {
@@ -574,6 +694,127 @@
           '・広告ブロッカー等の拡張機能 → 無効にするかシークレットウィンドウで試してください';
       }
       return err.message;
+    }
+
+    // STEP 5: 完成カットの取得・保存・結合
+    const videoBlobs = {};
+    async function getCutBlob(i) {
+      if (videoBlobs[i]) return videoBlobs[i];
+      const src = document.getElementById(`cut-vid-${i}`).src;
+      if (!src) return null;
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(`Cut #${i + 1} の動画を取得できませんでした (${res.status})`);
+      return (videoBlobs[i] = await res.blob());
+    }
+    function doneCuts() {
+      return [...Array(9).keys()].filter(i => {
+        const v = document.getElementById(`cut-vid-${i}`);
+        return v && v.getAttribute('src');
+      });
+    }
+    function saveBlob(blob, name) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    }
+    async function downloadAllVideos() {
+      const cuts = doneCuts();
+      if (!cuts.length) return alert('まだ完成したカット動画がありません。');
+      for (const i of cuts) {
+        try {
+          const b = await getCutBlob(i);
+          saveBlob(b, `cut_${String(i + 1).padStart(2, '0')}.mp4`);
+          await new Promise(r => setTimeout(r, 400));
+        } catch (e) { alert(e.message); }
+      }
+    }
+    async function joinVideos() {
+      const cuts = doneCuts();
+      if (cuts.length < 2) return alert('結合するには、動画化が完了したカットが2つ以上必要です。');
+      const statusEl = document.getElementById('joinStatus');
+      const btn = document.getElementById('btnJoin');
+      btn.disabled = true;
+      try {
+        statusEl.textContent = '動画を読み込み中...';
+        const urls = [];
+        for (const i of cuts) urls.push(URL.createObjectURL(await getCutBlob(i)));
+
+        // 1本目のサイズに合わせたキャンバスへ順に描画し、その映像を録画する
+        const probe = document.createElement('video');
+        probe.muted = true; probe.src = urls[0];
+        await new Promise((ok, ng) => { probe.onloadedmetadata = ok; probe.onerror = () => ng(new Error('動画を読み込めませんでした')); });
+        const W = probe.videoWidth || 1280, H = probe.videoHeight || 720;
+        const canvas = document.createElement('canvas');
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+
+        const withAudio = document.getElementById('joinWithAudio').checked;
+        const types = withAudio
+          ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm']
+          : ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+        const mimeType = types.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+        if (!mimeType) throw new Error('このブラウザは動画の録画に対応していません。Chrome か Edge をお使いください。');
+        const stream = canvas.captureStream(30);
+        // 各カットの音声をWeb Audioでまとめ、録画ストリームに音声トラックとして追加（スピーカーには流さない）
+        let ac = null, audioDest = null;
+        if (withAudio) {
+          ac = new (window.AudioContext || window.webkitAudioContext)();
+          await ac.resume();
+          audioDest = ac.createMediaStreamDestination();
+          audioDest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+        }
+        const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+        const chunks = [];
+        rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+        const stopped = new Promise(r => rec.onstop = r);
+        rec.start(1000);
+
+        for (let k = 0; k < urls.length; k++) {
+          statusEl.textContent = `結合中... ${k + 1} / ${urls.length}（Cut #${cuts[k] + 1}）`;
+          const v = document.createElement('video');
+          v.playsInline = true; v.src = urls[k];
+          if (ac) { v.muted = false; ac.createMediaElementSource(v).connect(audioDest); } else { v.muted = true; }
+          await new Promise((ok, ng) => { v.oncanplay = ok; v.onerror = () => ng(new Error(`Cut #${cuts[k] + 1} を再生できませんでした`)); });
+          // 縦横比を保って中央に配置（余白は黒）
+          const sc = Math.min(W / v.videoWidth, H / v.videoHeight);
+          const dw = v.videoWidth * sc, dh = v.videoHeight * sc, dx = (W - dw) / 2, dy = (H - dh) / 2;
+          await v.play();
+          await new Promise(done => {
+            const draw = () => {
+              ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+              ctx.drawImage(v, dx, dy, dw, dh);
+              if (v.ended) return done();
+              requestAnimationFrame(draw);
+            };
+            v.onended = () => { ctx.drawImage(v, dx, dy, dw, dh); done(); };
+            draw();
+          });
+        }
+        rec.stop();
+        if (ac) ac.close();
+        await stopped;
+        urls.forEach(u => URL.revokeObjectURL(u));
+
+        const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+        const blob = new Blob(chunks, { type: mimeType.split(';')[0] });
+        const out = document.getElementById('joinedVideo');
+        out.src = URL.createObjectURL(blob);
+        out.classList.remove('hidden');
+        statusEl.textContent = '';
+        const a = document.createElement('a');
+        a.href = out.src; a.download = `storyboard_full.${ext}`;
+        a.className = 'text-emerald-400 underline';
+        a.textContent = `✅ 結合完了（${cuts.length}カット）— storyboard_full.${ext} を保存`;
+        statusEl.appendChild(a);
+      } catch (err) {
+        statusEl.textContent = '';
+        alert('結合エラー: ' + explainFetchError(err) + '\n\nうまくいかない場合は「カット動画を一括保存」で保存し、Clipchamp 等でつないでください。');
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     function formatFalError(d) {
