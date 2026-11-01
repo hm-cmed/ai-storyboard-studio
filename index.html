@@ -170,8 +170,12 @@
         </div>
       </div>
       <p class="text-xs text-slate-400">
-        ※3×3の絵コンテ画像をClaudeのマルチモーダルAPIに送信し、各コマの「動き・表情・カメラワーク（Dolly, Pan, Zoom）」をJSON形式で一括抽出し、下の9枚のカードへ自動反映します。
+        ※STEP 1 の<strong>ストーリー概要・画風</strong>と、3×3絵コンテ全体＋分割した9コマの画像をClaudeに送ります。Claudeはまずストーリー概要を読み解いて（主題・感情の流れ・山場・登場人物）9コマに割り振り、それを絵コンテと照らし合わせてから、各カットの動き・カメラワーク・音・セリフを作ります。
       </p>
+      <details id="storyAnalysisBox" class="hidden bg-slate-900/70 border border-amber-500/30 rounded-lg p-4 text-sm" open>
+        <summary class="cursor-pointer font-semibold text-amber-300">📝 Claudeによるストーリー解釈（確認用）</summary>
+        <div id="storyAnalysis" class="mt-3 space-y-2 text-slate-300 whitespace-pre-wrap"></div>
+      </details>
     </section>
 
     <!-- STEP 3 & 4: 9-Panel Grid & Video Generation (Higgsfield / Seedance) -->
@@ -467,16 +471,58 @@
       try {
         // Claudeは長辺1568px超を内部で縮小するため、送信前にJPEGへ縮小（5MB制限・通信失敗を回避）
         const compact = await toCompactJpeg(document.getElementById('masterImage'), 1568);
-        const base64Data = compact.split(',')[1];
-        const mediaType = 'image/jpeg';
+        const story = document.getElementById('storyInput').value.trim();
+        const style = document.getElementById('styleInput').value.trim();
+        if (!story && !confirm('ストーリー概要が空です。絵コンテ画像だけからプロンプトを作りますか？')) return;
+
+        // 全体像（3×3）＋各コマの拡大画像を送り、細部（表情・手元）も読み取れるようにする
+        const content = [
+          { type: 'text', text: '【3×3絵コンテ全体】左上が1コマ目、右下が9コマ目（左→右、上→下の順）' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: compact.split(',')[1] } }
+        ];
+        for (let i = 0; i < 9; i++) {
+          if (!slicedDataUrls[i]) continue;
+          const j = await dataUrlToJpeg(slicedDataUrls[i], 768);
+          content.push({ type: 'text', text: `【Cut ${i + 1} の拡大】` });
+          content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: j.split(',')[1] } });
+        }
+        content.push({ type: 'text', text:
+`【ストーリー概要（作り手の意図。最優先で読み込むこと）】
+${story || '（未記入）'}
+
+【画風・スタイル】
+${style || '（未記入）'}
+
+上の手順どおり、まずストーリー概要を吟味してから、9カット分をJSONで出力してください。` });
 
         const systemPrompt = `あなたはプロの映画監督およびAI動画プロンプトエンジニアです。
-添付された3×3（9コマ）のストーリーボード画像を左上（1コマ目）から右下（9コマ目）まで順番に解析し、SeedanceやHiggsfield等のImage-to-Videoモデルに入力するための英語の動画生成プロンプトを作成してください。
-必ず以下の純粋なJSON配列フォーマットのみで出力してください（解説文やMarkdownコードブロックは不要）：
-[
-  {"cut": 1, "prompt": "英語の具体的なモーション・表情・照明・カメラワーク指示（日本語の簡単な補足）", "sound": "英語の環境音・効果音の説明（例: quiet night room ambience, soft crayon scratching）", "dialogue": "日本語のセリフ。形式は 話者:「セリフ」。不要なら空文字"},
-  ...9コマ分
-]
+作り手が書いた「ストーリー概要」と、それをもとに描かれた3×3（9コマ）の絵コンテ画像から、Seedance・Veo等のImage-to-Videoモデルに入力する各カットの動画プロンプトを作ります。
+
+## 作業手順（この順番で考えること）
+1. ストーリー概要を丁寧に読み解く：主題（何を伝えたい話か）、登場人物と関係、時間・場所、感情の流れ（起点→変化→山場→余韻）、作り手が明示している演出（例：「5コマ目で絵のアップ」）を洗い出す。
+2. 物語を9つのビート（展開の区切り）に分け、1〜9コマに割り振る。明示された演出の指定は必ず守る。
+3. 絵コンテ全体と各コマの拡大画像を見て、各コマに実際に何が描かれているか（人物・構図・表情・小道具）を確認し、2の割り振りと照合する。
+4. 各カットのプロンプトを作る。映像の見た目（人物の外見・構図・背景）は絵コンテ画像に忠実に、動き・表情の変化・感情の強さ・カメラワーク・音・セリフは、そのコマが物語のどの段階かに合わせて決める。前後のカットと動きや感情が自然につながるようにする。
+5. 絵とストーリー概要が食い違う場合は、絵の見た目は変えずに、動きと感情表現でストーリーの意図に寄せる。食い違いはmismatchesに書く。
+
+## 出力形式
+解説文やMarkdownコードブロックは付けず、次の純粋なJSONオブジェクトだけを出力すること：
+{
+  "analysis": {
+    "theme": "物語の主題（日本語・1〜2文）",
+    "characters": "登場人物と関係（日本語）",
+    "emotional_arc": "感情の流れ（日本語・起点→山場→余韻）",
+    "beats": ["1: そのコマの物語上の役割（日本語・短く）", "...", "9: ..."],
+    "mismatches": "絵とストーリー概要の食い違い（なければ空文字）"
+  },
+  "cuts": [
+    {"cut": 1, "prompt": "英語の具体的なモーション・表情・照明・カメラワーク指示（日本語の簡単な補足）", "sound": "英語の環境音・効果音の説明（例: quiet night room ambience, soft crayon scratching）", "dialogue": "日本語のセリフ。形式は 話者:「セリフ」。不要なら空文字"},
+    ...9コマ分
+  ]
+}
+promptのルール：
+- 1枚の静止画から5秒前後で起こる動きとして書く（場面転換や別の場所への移動は書かない）
+- 物語上の役割（beats）がその動きと表情に表れるようにする
 セリフのルール：
 - 物語上自然な場面だけに入れ、9コマ中2〜4コマ程度に絞る（無言のコマが多くてよい）
 - 1コマ1人・1文、日本語で15文字程度まで（5秒前後で言い切れる長さ）
@@ -493,15 +539,9 @@
           },
           body: JSON.stringify({
             model: model,
-            max_tokens: 4096,
+            max_tokens: 8000,
             system: systemPrompt,
-            messages: [{
-              role: 'user',
-              content: [
-                { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
-                { type: 'text', text: `ストーリー概要: ${document.getElementById('storyInput').value}\nこの3×3絵コンテの1〜9コマ目それぞれの動画生成プロンプトをJSON配列で出力してください。` }
-              ]
-            }]
+            messages: [{ role: 'user', content }]
           })
         });
 
@@ -511,8 +551,10 @@
         const textBlock = (data.content || []).find(b => b.type === 'text');
         if (!textBlock) throw new Error('テキスト応答がありませんでした');
         const rawText = textBlock.text.trim();
-        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-        const promptsArray = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
+        const parsed = parseClaudeJson(rawText);
+        const promptsArray = Array.isArray(parsed) ? parsed : (parsed.cuts || []);
+        if (!promptsArray.length) throw new Error('カットのプロンプトを読み取れませんでした。もう一度お試しください。');
+        showStoryAnalysis(parsed.analysis);
 
         promptsArray.forEach((item, idx) => {
           if (idx < 9) {
@@ -667,6 +709,43 @@
         ? 'このモデルは映像と同時に環境音・セリフを生成します。セリフ欄が空のカットは発話なしになります。日本語の発音や口の動きはモデルにより精度が異なるため、1カットで試してから一括生成してください。'
         : 'このモデルは映像と同時に環境音・効果音を生成します（セリフなし）。';
       else hint.textContent = '⚠ このモデルは音声を生成できないため、完成後に MMAudio で環境音・効果音だけを後付けします（セリフは入りません）。セリフが必要なら Seedance 1.5 Pro か Veo 3.1 Fast を選んでください。';
+    }
+
+    function parseClaudeJson(text) {
+      const t = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      try { return JSON.parse(t); } catch (e) {}
+      const obj = t.match(/\{[\s\S]*\}/);
+      if (obj) { try { return JSON.parse(obj[0]); } catch (e) {} }
+      const arr = t.match(/\[[\s\S]*\]/);
+      if (arr) return JSON.parse(arr[0]);
+      throw new Error('Claudeの応答をJSONとして読み取れませんでした');
+    }
+    function showStoryAnalysis(a) {
+      const box = document.getElementById('storyAnalysisBox');
+      const el = document.getElementById('storyAnalysis');
+      if (!a) { box.classList.add('hidden'); return; }
+      const rows = [
+        ['主題', a.theme], ['登場人物', a.characters], ['感情の流れ', a.emotional_arc],
+        ['9コマの割り振り', Array.isArray(a.beats) ? a.beats.join('\n') : a.beats],
+        ['絵との食い違い', a.mismatches || 'なし']
+      ];
+      el.replaceChildren(...rows.filter(r => r[1]).map(([k, v]) => {
+        const d = document.createElement('div');
+        const b = document.createElement('span');
+        b.className = 'text-amber-300 font-semibold';
+        b.textContent = `${k}：`;
+        d.append(b, document.createTextNode(String(v)));
+        return d;
+      }));
+      box.classList.remove('hidden');
+    }
+    function dataUrlToJpeg(url, maxSide) {
+      return new Promise((ok, ng) => {
+        const im = new Image();
+        im.onload = () => toCompactJpeg(im, maxSide).then(ok, ng);
+        im.onerror = () => ng(new Error('画像を読み込めませんでした'));
+        im.src = url;
+      });
     }
 
     function toCompactJpeg(img, maxSide) {
