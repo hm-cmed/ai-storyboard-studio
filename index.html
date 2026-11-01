@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Storyboard Studio - 3x3一貫性動画生成スタジオ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
+    .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+    .loader { border: 3px solid #334155; border-top: 3px solid #38bdf8; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+
+  <div class="max-w-7xl mx-auto space-y-8">
+    <!-- Header -->
+    <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-700 pb-6">
+      <div>
+        <h1 class="text-3xl font-bold bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">
+          🎬 AI Storyboard Video Studio
+        </h1>
+        <p class="text-slate-400 text-sm mt-1">
+          1枚の「3×3絵コンテ」からキャラブレゼロの9カット動画を全自動生成する統合パイプライン
+        </p>
+      </div>
+      <button onclick="toggleSettings()" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-sm flex items-center gap-2">
+        ⚙️ APIキー設定 (ブラウザ保存)
+      </button>
+    </header>
+
+    <!-- API Keys Modal / Panel -->
+    <section id="settingsPanel" class="glass p-6 rounded-xl space-y-4 hidden">
+      <div class="flex justify-between items-center">
+        <h2 class="text-lg font-semibold text-sky-400">🔑 APIキー設定（このブラウザ内にのみ保存。本サイトのサーバーには送信されません）</h2>
+        <button onclick="saveApiKeys()" class="px-4 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium">保存して閉じる</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div>
+          <label class="block text-slate-300 mb-1">① OpenAI API Key (絵コンテ画像生成)</label>
+          <input type="password" id="openaiKey" placeholder="sk-..." class="w-full p-2.5 rounded bg-slate-900 border border-slate-700 text-white">
+        </div>
+        <div>
+          <label class="block text-slate-300 mb-1">② Anthropic (Claude) API Key (プロンプト生成)</label>
+          <input type="password" id="anthropicKey" placeholder="sk-ant-..." class="w-full p-2.5 rounded bg-slate-900 border border-slate-700 text-white">
+        </div>
+        <div>
+          <label class="block text-slate-300 mb-1">③ fal.ai / 動画統合API Key (Seedance等)</label>
+          <input type="password" id="falKey" placeholder="fal_key_..." class="w-full p-2.5 rounded bg-slate-900 border border-slate-700 text-white">
+        </div>
+      </div>
+      <p class="text-xs text-slate-400">※キーは各機能の実行時に、OpenAI・Anthropic・fal.ai の各APIへ直接送られます。共用PCでは使用後に「キーを消去」してください。</p>
+      <button onclick="clearApiKeys()" class="px-3 py-1 bg-rose-600/30 hover:bg-rose-600/50 border border-rose-500/40 rounded text-xs">🗑 キーを消去</button>
+      <p class="text-xs text-slate-400">※APIを使わず手持ちの3×3画像をドラッグ＆ドロップして9分割＆プロンプト管理を行うことも可能です。</p>
+    </section>
+
+    <!-- STEP 1: Storyboard Generation / Upload -->
+    <section class="glass p-6 rounded-xl space-y-4">
+      <div class="flex items-center gap-2">
+        <span class="px-2.5 py-1 bg-sky-500/20 text-sky-400 font-bold rounded text-sm">STEP 1</span>
+        <h2 class="text-xl font-bold">16:9の「3×3絵コンテ（9コマ）」を生成 または アップロード</h2>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Prompt Builder -->
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm text-slate-300 mb-1">画風・スタイル</label>
+            <input type="text" id="styleInput" value="ピクサー調3DCGアニメーション、映画のようなライティング" class="w-full p-2.5 rounded bg-slate-900 border border-slate-700 text-sm">
+          </div>
+          <div>
+            <label class="block text-sm text-slate-300 mb-1">ストーリー概要（始まり〜終わり）</label>
+            <textarea id="storyInput" rows="3" class="w-full p-2.5 rounded bg-slate-900 border border-slate-700 text-sm">夜に部屋のデスクで仕事中のパパの横で、赤ちゃんが一生懸命クレヨンで家族の絵を描き、5コマ目で絵のアップが映り、最後にパパが気づいて感動し赤ちゃんを優しく抱きしめるまで</textarea>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <button onclick="generateStoryboardImage()" id="btnGenStoryboard" class="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:opacity-90 rounded-lg font-semibold text-sm flex items-center gap-2">
+              <span>🎨 APIで3×3絵コンテを自動生成</span>
+            </button>
+            <button onclick="copyChatGptPrompt()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-sm">
+              📋 ChatGPT用プロンプトをコピー
+            </button>
+          </div>
+          <div class="pt-2 border-t border-slate-800">
+            <label class="block text-sm text-slate-400 mb-2">または、生成済みの3×3画像（storyboard.png）を直接読み込む：</label>
+            <input type="file" id="imageUpload" accept="image/*" onchange="handleImageUpload(event)" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-slate-800 file:text-sky-400 hover:file:bg-slate-700">
+          </div>
+        </div>
+
+        <!-- Master Image Preview -->
+        <div class="flex flex-col items-center justify-center bg-slate-900/80 border border-dashed border-slate-700 rounded-xl p-4 min-h-[260px]">
+          <img id="masterImage" class="max-h-72 rounded-lg hidden object-contain mb-3" alt="Master Storyboard">
+          <div id="masterPlaceholder" class="text-slate-500 text-sm text-center">
+            ここに3×3のマスター絵コンテが表示されます。<br>読み込まれると自動で9枚のカット（16:9）に分割されます。
+          </div>
+          <div id="sliceControls" class="hidden flex gap-3 mt-2">
+            <button onclick="sliceGridImage()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-xs border border-slate-600">🔄 再スライス</button>
+            <button onclick="downloadAllSlices()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-xs border border-slate-600">💾 9枚の画像を個別保存</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 2: Claude Opus Prompt Generation -->
+    <section class="glass p-6 rounded-xl space-y-4">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div class="flex items-center gap-2">
+          <span class="px-2.5 py-1 bg-amber-500/20 text-amber-400 font-bold rounded text-sm">STEP 2</span>
+          <h2 class="text-xl font-bold">Claude (Opus) で全9カットの動画プロンプトを一括生成</h2>
+        </div>
+        <div class="flex gap-3">
+          <input id="claudeModel" list="claudeModelList" value="claude-opus-4-6" title="モデルIDは直接編集できます" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-amber-400 font-medium w-56">
+          <datalist id="claudeModelList">
+            <option value="claude-opus-4-6">Claude Opus (最高精度)</option>
+            <option value="claude-sonnet-4-6">Claude Sonnet (高速・低コスト)</option>
+          </datalist>
+          <button onclick="generateAllVideoPrompts()" id="btnGenPrompts" class="px-5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:opacity-90 rounded-lg font-semibold text-sm flex items-center gap-2">
+            <span>⚡ 絵コンテを解析して9カットのプロンプトを自動記入</span>
+          </button>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400">
+        ※3×3の絵コンテ画像をClaudeのマルチモーダルAPIに送信し、各コマの「動き・表情・カメラワーク（Dolly, Pan, Zoom）」をJSON形式で一括抽出し、下の9枚のカードへ自動反映します。
+      </p>
+    </section>
+
+    <!-- STEP 3 & 4: 9-Panel Grid & Video Generation (Higgsfield / Seedance) -->
+    <section class="glass p-6 rounded-xl space-y-6">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div class="flex items-center gap-2">
+          <span class="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 font-bold rounded text-sm">STEP 3 & 4</span>
+          <h2 class="text-xl font-bold">9カット分割ボード ＆ 動画生成（Seedance / Kling / Hailuo）</h2>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="text-sm text-slate-300">使用動画モデル:</label>
+          <input id="videoModel" list="videoModelList" value="fal-ai/bytedance/seedance/v1/pro/image-to-video" title="fal.aiのエンドポイントIDは直接編集できます" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-medium w-80">
+          <datalist id="videoModelList">
+            <option value="fal-ai/bytedance/seedance/v1/pro/image-to-video">Seedance 1.0 Pro (高一貫性・本命)</option>
+            <option value="fal-ai/bytedance/seedance/v1/lite/image-to-video">Seedance 1.0 Lite (高速・低コスト検証用)</option>
+            <option value="fal-ai/kling-video/v2/master/image-to-video">Kling 2.0 Master (シネマティック)</option>
+            <option value="fal-ai/minimax/video-01/image-to-video">Hailuo MiniMax (格安テスト用)</option>
+          </datalist>
+          <button onclick="generateAllVideos()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-semibold text-sm">
+            🎬 全9カットを一括動画化
+          </button>
+        </div>
+      </div>
+
+      <!-- 3x3 Cards Container -->
+      <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- JS will populate 9 cards here -->
+      </div>
+    </section>
+  </div>
+
+  <!-- Hidden Canvas for Image Slicing -->
+  <canvas id="sliceCanvas" class="hidden"></canvas>
+
+  <script>
+    // 状態管理
+    let masterDataUrl = null;
+    let slicedDataUrls = Array(9).fill(null);
+
+    // 初期化：9枚のカード枠を生成
+    window.addEventListener('DOMContentLoaded', () => {
+      loadApiKeys();
+      renderCardsGrid();
+    });
+
+    function toggleSettings() {
+      const panel = document.getElementById('settingsPanel');
+      panel.classList.toggle('hidden');
+    }
+
+    // localStorageが使えない環境（プライベートモード等）でも動くよう、メモリにも保持
+    const keyCache = {};
+    function getKey(name) {
+      try { return localStorage.getItem(name) || keyCache[name] || ''; } catch (e) { return keyCache[name] || ''; }
+    }
+    function setKey(name, value) {
+      keyCache[name] = value;
+      try { value ? localStorage.setItem(name, value) : localStorage.removeItem(name); } catch (e) {}
+    }
+
+    function saveApiKeys() {
+      setKey('sb_openai_key', document.getElementById('openaiKey').value.trim());
+      setKey('sb_anthropic_key', document.getElementById('anthropicKey').value.trim());
+      setKey('sb_fal_key', document.getElementById('falKey').value.trim());
+      document.getElementById('settingsPanel').classList.add('hidden');
+      alert('APIキーをこのブラウザに保存しました。');
+    }
+
+    function clearApiKeys() {
+      ['sb_openai_key', 'sb_anthropic_key', 'sb_fal_key'].forEach(k => setKey(k, ''));
+      loadApiKeys();
+      alert('保存済みのAPIキーを消去しました。');
+    }
+
+    function loadApiKeys() {
+      document.getElementById('openaiKey').value = getKey('sb_openai_key');
+      document.getElementById('anthropicKey').value = getKey('sb_anthropic_key');
+      document.getElementById('falKey').value = getKey('sb_fal_key');
+    }
+
+    function renderCardsGrid() {
+      const grid = document.getElementById('cardsGrid');
+      grid.innerHTML = '';
+      for (let i = 0; i < 9; i++) {
+        grid.innerHTML += `
+          <div class="bg-slate-900 border border-slate-700 rounded-xl p-4 flex flex-col gap-3">
+            <div class="flex justify-between items-center">
+              <span class="text-sm font-bold text-sky-400">Cut #${i + 1}</span>
+              <span id="status-${i}" class="text-xs text-slate-400">待機中</span>
+            </div>
+            <div class="aspect-video bg-slate-950 rounded-lg overflow-hidden flex items-center justify-center relative border border-slate-800">
+              <img id="cut-img-${i}" class="w-full h-full object-cover hidden" alt="Cut ${i + 1}">
+              <video id="cut-vid-${i}" class="w-full h-full object-cover hidden" controls loop></video>
+              <span id="cut-empty-${i}" class="text-xs text-slate-600">No Image</span>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">カメラワーク指定 (Higgsfield風プリセット)</label>
+              <select id="cam-${i}" class="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-xs text-slate-200 mb-2">
+                <option value="Static shot, subtle natural motion">固定ショット (自然な微細モーション)</option>
+                <option value="Slow dolly zoom in on character face">スロー・ドリーイン (感情のクローズアップ)</option>
+                <option value="Cinematic pan right to left">シネマティック・パン (横移動)</option>
+                <option value="Over-the-shoulder shot, shallow depth of field">肩越しショット (背景ボケ・映画風)</option>
+                <option value="Extreme close-up on hands and details">手元・ディテールの極端なアップ</option>
+              </select>
+              <label class="block text-xs text-slate-400 mb-1">動画プロンプト (Claude出力 / 編集可)</label>
+              <textarea id="prompt-${i}" rows="3" placeholder="ここにCut #${i + 1}の動きのプロンプトが入ります..." class="w-full p-2 rounded bg-slate-950 border border-slate-800 text-xs text-slate-200"></textarea>
+            </div>
+            <button onclick="generateSingleVideo(${i})" id="btn-vid-${i}" class="mt-auto w-full py-2 bg-emerald-600/80 hover:bg-emerald-600 rounded-lg text-xs font-semibold transition">
+              ▶️ このカットを動画化 (Seedance)
+            </button>
+          </div>
+        `;
+      }
+    }
+
+    // ChatGPT用プロンプト作成・コピー
+    function buildStoryboardPrompt() {
+      const style = document.getElementById('styleInput').value;
+      const story = document.getElementById('storyInput').value;
+      return `${style}で、「${story}」という一連の物語を、16:9のアスペクト比の中に3×3（計9コマ）で割ったストーリーボード（絵コンテ）として1枚の画像に出力してください。左上（1コマ目）から右下（9コマ目）へ時系列順に並べ、登場人物の顔立ち・髪型・服装・部屋の背景や照明は全9コマで完全に統一してください。5コマ目や6コマ目には手元や表情の印象的なクローズアップを入れて映画的な演出にしてください。コマ間に白い枠線や番号は入れず、シームレスな3×3グリッドにしてください。`;
+    }
+
+    function copyChatGptPrompt() {
+      const prompt = buildStoryboardPrompt();
+      navigator.clipboard.writeText(prompt)
+        .then(() => alert('ChatGPT用の3×3絵コンテ生成プロンプトをコピーしました！'))
+        .catch(() => window.prompt('自動コピーできませんでした。以下を手動でコピーしてください：', prompt));
+    }
+
+    // 画像アップロード＆自動9分割
+    function handleImageUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setMasterImage(e.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function setMasterImage(dataUrl) {
+      masterDataUrl = dataUrl;
+      const img = document.getElementById('masterImage');
+      img.src = dataUrl;
+      img.classList.remove('hidden');
+      document.getElementById('masterPlaceholder').classList.add('hidden');
+      document.getElementById('sliceControls').classList.remove('hidden');
+      img.onload = () => sliceGridImage();
+    }
+
+    // 3x3グリッドを9枚の独立画像にスライスする処理
+    function sliceGridImage() {
+      const img = document.getElementById('masterImage');
+      const canvas = document.getElementById('sliceCanvas');
+      const ctx = canvas.getContext('2d');
+
+      const cellWidth = Math.floor(img.naturalWidth / 3);
+      const cellHeight = Math.floor(img.naturalHeight / 3);
+      canvas.width = cellWidth;
+      canvas.height = cellHeight;
+
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+          const index = row * 3 + col;
+          ctx.clearRect(0, 0, cellWidth, cellHeight);
+          ctx.drawImage(
+            img,
+            col * cellWidth, row * cellHeight, cellWidth, cellHeight,
+            0, 0, cellWidth, cellHeight
+          );
+          const slicedUrl = canvas.toDataURL('image/png');
+          slicedDataUrls[index] = slicedUrl;
+
+          const cutImg = document.getElementById(`cut-img-${index}`);
+          cutImg.src = slicedUrl;
+          cutImg.classList.remove('hidden');
+          document.getElementById(`cut-empty-${index}`).classList.add('hidden');
+          document.getElementById(`status-${index}`).innerText = 'スライス完了';
+        }
+      }
+    }
+
+    function downloadAllSlices() {
+      slicedDataUrls.forEach((url, idx) => {
+        if (!url) return;
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cut_${idx + 1}.png`;
+        a.click();
+      });
+    }
+
+    // STEP 1: OpenAI API (gpt-image-1 / dall-e-3) で3x3絵コンテ生成
+    async function generateStoryboardImage() {
+      const apiKey = getKey('sb_openai_key');
+      if (!apiKey) {
+        toggleSettings();
+        return alert('OpenAI APIキーを設定してください（またはChatGPTで生成した画像をアップロードしてください）。');
+      }
+      const btn = document.getElementById('btnGenStoryboard');
+      btn.disabled = true;
+      btn.innerHTML = `<span class="loader"></span> <span>3×3絵コンテを生成中...</span>`;
+
+      try {
+        const res = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          // gpt-image-1 は常にbase64で返す（response_format指定は不可）。横長は1536x1024
+          body: JSON.stringify({
+            model: 'gpt-image-1',
+            prompt: buildStoryboardPrompt(),
+            n: 1,
+            size: '1536x1024'
+          })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error.message);
+        const item = data.data && data.data[0];
+        if (item && item.b64_json) setMasterImage(`data:image/png;base64,${item.b64_json}`);
+        else if (item && item.url) setMasterImage(item.url);
+        else throw new Error('画像データが返されませんでした');
+      } catch (err) {
+        alert('画像生成エラー: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🎨 APIで3×3絵コンテを自動生成</span>`;
+      }
+    }
+
+    // STEP 2: Claude APIで3x3絵コンテを解析し、9カット分の動画プロンプトを出力
+    async function generateAllVideoPrompts() {
+      if (!masterDataUrl) return alert('先に3×3の絵コンテ画像を生成またはアップロードしてください。');
+      const apiKey = getKey('sb_anthropic_key');
+      if (!apiKey) {
+        toggleSettings();
+        return alert('Anthropic (Claude) APIキーを設定してください。');
+      }
+
+      const btn = document.getElementById('btnGenPrompts');
+      const model = document.getElementById('claudeModel').value;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="loader"></span> <span>Claudeが9コマを解析中...</span>`;
+
+      try {
+        const base64Data = masterDataUrl.split(',')[1];
+        const mediaType = masterDataUrl.split(';')[0].split(':')[1];
+
+        const systemPrompt = `あなたはプロの映画監督およびAI動画プロンプトエンジニアです。
+添付された3×3（9コマ）のストーリーボード画像を左上（1コマ目）から右下（9コマ目）まで順番に解析し、SeedanceやHiggsfield等のImage-to-Videoモデルに入力するための英語の動画生成プロンプトを作成してください。
+必ず以下の純粋なJSON配列フォーマットのみで出力してください（解説文やMarkdownコードブロックは不要）：
+[
+  {"cut": 1, "prompt": "英語の具体的なモーション・表情・照明・カメラワーク指示（日本語の簡単な補足）"},
+  ...9コマ分
+]`;
+
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify({
+            model: model,
+            max_tokens: 4096,
+            system: systemPrompt,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
+                { type: 'text', text: `ストーリー概要: ${document.getElementById('storyInput').value}\nこの3×3絵コンテの1〜9コマ目それぞれの動画生成プロンプトをJSON配列で出力してください。` }
+              ]
+            }]
+          })
+        });
+
+        const data = await res.json();
+        if (data.error) throw new Error(data.error.message);
+
+        const textBlock = (data.content || []).find(b => b.type === 'text');
+        if (!textBlock) throw new Error('テキスト応答がありませんでした');
+        const rawText = textBlock.text.trim();
+        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+        const promptsArray = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
+
+        promptsArray.forEach((item, idx) => {
+          if (idx < 9) {
+            document.getElementById(`prompt-${idx}`).value = item.prompt;
+            document.getElementById(`status-${idx}`).innerText = 'プロンプト準備完了';
+          }
+        });
+      } catch (err) {
+        alert('Claudeプロンプト生成エラー: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>⚡ 絵コンテを解析して9カットのプロンプトを自動記入</span>`;
+      }
+    }
+
+    // STEP 3 & 4: fal.ai 統合API経由で Seedance / Kling 等を呼び出して動画化
+    async function generateSingleVideo(index, quiet = false) {
+      const falKey = getKey('sb_fal_key');
+      if (!falKey) {
+        toggleSettings();
+        return alert('fal.ai のAPIキーを設定してください。');
+      }
+      const imageUrl = slicedDataUrls[index];
+      if (!imageUrl) return alert(`Cut #${index + 1} の画像がありません。`);
+
+      const camPrompt = document.getElementById(`cam-${index}`).value;
+      const motionPrompt = document.getElementById(`prompt-${index}`).value;
+      const fullPrompt = `${camPrompt}. ${motionPrompt}`;
+      const endpoint = document.getElementById('videoModel').value;
+
+      const statusEl = document.getElementById(`status-${index}`);
+      const btnEl = document.getElementById(`btn-vid-${index}`);
+      btnEl.disabled = true;
+      statusEl.innerHTML = `<span class="text-amber-400">⏳ 動画生成中...</span>`;
+
+      try {
+        // 動画生成は数分かかるため、同期API(fal.run)ではなくキューAPIで投入→ポーリング
+        const headers = { 'Content-Type': 'application/json', 'Authorization': `Key ${falKey}` };
+        const submit = await fetch(`https://queue.fal.run/${endpoint}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ prompt: fullPrompt, image_url: imageUrl })
+        });
+        const job = await submit.json();
+        if (!submit.ok) throw new Error(formatFalError(job));
+
+        const statusUrl = job.status_url || `https://queue.fal.run/${endpoint}/requests/${job.request_id}/status`;
+        const responseUrl = job.response_url || `https://queue.fal.run/${endpoint}/requests/${job.request_id}`;
+        const started = Date.now();
+        while (true) {
+          await new Promise(r => setTimeout(r, 5000));
+          const st = await (await fetch(statusUrl, { headers })).json();
+          const sec = Math.round((Date.now() - started) / 1000);
+          if (st.status === 'COMPLETED') break;
+          if (st.status === 'IN_QUEUE') statusEl.innerHTML = `<span class="text-amber-400">⏳ 順番待ち ${st.queue_position ?? ''} (${sec}秒)</span>`;
+          else if (st.status === 'IN_PROGRESS') statusEl.innerHTML = `<span class="text-amber-400">⏳ 生成中 (${sec}秒)</span>`;
+          else if (st.error) throw new Error(st.error);
+          if (sec > 900) throw new Error('15分以上応答がないため打ち切りました');
+        }
+
+        const resultRes = await fetch(responseUrl, { headers });
+        const data = await resultRes.json();
+        if (!resultRes.ok) throw new Error(formatFalError(data));
+
+        const videoUrl = data.video?.url || data.video_url;
+        if (!videoUrl) throw new Error('動画URLが返されませんでした');
+        const vidEl = document.getElementById(`cut-vid-${index}`);
+        const imgEl = document.getElementById(`cut-img-${index}`);
+        vidEl.src = videoUrl;
+        vidEl.classList.remove('hidden');
+        imgEl.classList.add('hidden');
+        const a = document.createElement('a');
+        a.href = videoUrl;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.className = 'text-emerald-400 underline';
+        a.textContent = '✅ 完成 (DL)';
+        statusEl.replaceChildren(a);
+      } catch (err) {
+        statusEl.innerHTML = `<span class="text-rose-400">エラー</span>`;
+        statusEl.title = err.message;
+        if (!quiet) alert(`Cut #${index + 1} 動画生成エラー: ` + err.message);
+      } finally {
+        btnEl.disabled = false;
+      }
+    }
+
+    function formatFalError(d) {
+      if (!d) return '不明なエラー';
+      if (typeof d.detail === 'string') return d.detail;
+      if (Array.isArray(d.detail)) return d.detail.map(x => x.msg || JSON.stringify(x)).join(' / ');
+      return JSON.stringify(d);
+    }
+
+    // 同時実行は3本まで（レート制限・課金の暴発を避ける）
+    async function generateAllVideos() {
+      const targets = [...Array(9).keys()].filter(i => slicedDataUrls[i]);
+      if (!getKey('sb_fal_key')) { toggleSettings(); return alert('fal.ai のAPIキーを設定してください。'); }
+      if (!targets.length) return alert('先に絵コンテ画像を読み込んでください。');
+      if (!confirm(`${targets.length}カットの動画生成をリクエストします（同時3本まで・API利用料が発生します）。よろしいですか？`)) return;
+      const queue = [...targets];
+      const worker = async () => { while (queue.length) await generateSingleVideo(queue.shift(), true); };
+      await Promise.all([worker(), worker(), worker()]);
+    }
+  </script>
+</body>
+</html>
