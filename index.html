@@ -347,7 +347,7 @@
         else if (item && item.url) setMasterImage(item.url);
         else throw new Error('画像データが返されませんでした');
       } catch (err) {
-        alert('画像生成エラー: ' + err.message);
+        alert('画像生成エラー: ' + explainFetchError(err));
       } finally {
         btn.disabled = false;
         btn.innerHTML = `<span>🎨 APIで3×3絵コンテを自動生成</span>`;
@@ -369,8 +369,10 @@
       btn.innerHTML = `<span class="loader"></span> <span>Claudeが9コマを解析中...</span>`;
 
       try {
-        const base64Data = masterDataUrl.split(',')[1];
-        const mediaType = masterDataUrl.split(';')[0].split(':')[1];
+        // Claudeは長辺1568px超を内部で縮小するため、送信前にJPEGへ縮小（5MB制限・通信失敗を回避）
+        const compact = await toCompactJpeg(document.getElementById('masterImage'), 1568);
+        const base64Data = compact.split(',')[1];
+        const mediaType = 'image/jpeg';
 
         const systemPrompt = `あなたはプロの映画監督およびAI動画プロンプトエンジニアです。
 添付された3×3（9コマ）のストーリーボード画像を左上（1コマ目）から右下（9コマ目）まで順番に解析し、SeedanceやHiggsfield等のImage-to-Videoモデルに入力するための英語の動画生成プロンプトを作成してください。
@@ -418,7 +420,7 @@
           }
         });
       } catch (err) {
-        alert('Claudeプロンプト生成エラー: ' + err.message);
+        alert('Claudeプロンプト生成エラー: ' + explainFetchError(err));
       } finally {
         btn.disabled = false;
         btn.innerHTML = `<span>⚡ 絵コンテを解析して9カットのプロンプトを自動記入</span>`;
@@ -491,10 +493,37 @@
       } catch (err) {
         statusEl.innerHTML = `<span class="text-rose-400">エラー</span>`;
         statusEl.title = err.message;
-        if (!quiet) alert(`Cut #${index + 1} 動画生成エラー: ` + err.message);
+        if (!quiet) alert(`Cut #${index + 1} 動画生成エラー: ` + explainFetchError(err));
       } finally {
         btnEl.disabled = false;
       }
+    }
+
+    function toCompactJpeg(img, maxSide) {
+      return new Promise((resolve, reject) => {
+        const draw = () => {
+          const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+          const c = document.createElement('canvas');
+          c.width = Math.round(img.naturalWidth * scale);
+          c.height = Math.round(img.naturalHeight * scale);
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          try { resolve(c.toDataURL('image/jpeg', 0.9)); } catch (e) { reject(e); }
+        };
+        img.complete && img.naturalWidth ? draw() : (img.onload = draw);
+      });
+    }
+
+    function explainFetchError(err) {
+      if (err instanceof TypeError && /fetch|network|load failed/i.test(err.message)) {
+        return err.message + '\n\nAPIサーバーに接続できませんでした。考えられる原因：\n' +
+          '・Claudeアプリのプレビュー画面など、外部通信が禁止された場所でこのページを開いている → ChromeやEdgeで直接開いてください\n' +
+          '・大学/病院のネットワークやセキュリティソフトが api.anthropic.com をブロックしている → 自宅回線やスマホのテザリングで試してください\n' +
+          '・広告ブロッカー等の拡張機能 → 無効にするかシークレットウィンドウで試してください';
+      }
+      return err.message;
     }
 
     function formatFalError(d) {
