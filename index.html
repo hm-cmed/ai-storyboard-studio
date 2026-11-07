@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 通信先を OpenAI・Anthropic・fal.ai に限定し、万一不正なスクリプトが入ってもキーを外部へ送れないようにする -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' data: blob: https://api.openai.com https://api.anthropic.com https://queue.fal.run https://*.fal.run https://fal.media https://*.fal.media https://storage.googleapis.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
   <title>AI Storyboard Studio - 3x3一貫性動画生成スタジオ</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -82,7 +85,7 @@
     <!-- API Keys Modal / Panel -->
     <section id="settingsPanel" class="glass p-6 rounded-xl space-y-4 hidden">
       <div class="flex justify-between items-center">
-        <h2 class="text-lg font-semibold text-sky-400">🔑 APIキー設定（このブラウザ内にのみ保存。本サイトのサーバーには送信されません）</h2>
+        <h2 class="text-lg font-semibold text-sky-400">🔑 APIキー設定（このブラウザ内でのみ保持。本サイトのサーバーには送信されません）</h2>
         <button onclick="saveApiKeys()" class="px-4 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium">保存して閉じる</button>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -99,6 +102,7 @@
           <input type="password" id="falKey" placeholder="xxxxxxxx-xxxx-…:xxxxxxxx（コロン含め全部）" class="w-full p-2.5 rounded bg-slate-900 border border-slate-700 text-white">
         </div>
       </div>
+      <label class="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" id="rememberKeys"> このブラウザにキーを記憶する（オフのときは、このタブを閉じると消えます）</label>
       <p class="text-xs text-slate-400">※キーの取り方は下の「🔰 APIキーの取得方法」を参照してください。</p>
       <p class="text-xs text-slate-400">※キーは各機能の実行時に、OpenAI・Anthropic・fal.ai の各APIへ直接送られます。共用PCでは使用後に「キーを消去」してください。</p>
       <button onclick="clearApiKeys()" class="px-3 py-1 bg-rose-600/30 hover:bg-rose-600/50 border border-rose-500/40 rounded text-xs">🗑 キーを消去</button>
@@ -254,6 +258,7 @@
 
     // 初期化：9枚のカード枠を生成
     window.addEventListener('DOMContentLoaded', () => {
+      migrateOldKeys();
       loadApiKeys();
       renderCardsGrid();
       onAudioModeChange();
@@ -264,26 +269,53 @@
       panel.classList.toggle('hidden');
     }
 
-    // localStorageが使えない環境（プライベートモード等）でも動くよう、メモリにも保持
+    // キーの保管先：既定は sessionStorage（タブを閉じると消える）。「記憶する」をオンにしたときだけ localStorage。
+    // hm-cmed.github.io 上の他のアプリと保存領域を共有するため、長期保存は本人が選んだときに限る。
+    // どちらも使えない環境（プライベートモード等）でも動くよう、メモリにも保持
+    const KEY_NAMES = ['sb_openai_key', 'sb_anthropic_key', 'sb_fal_key'];
+    const REMEMBER_FLAG = 'sb_remember_keys';
     const keyCache = {};
-    function getKey(name) {
-      try { return localStorage.getItem(name) || keyCache[name] || ''; } catch (e) { return keyCache[name] || ''; }
+    function store(kind) { try { return window[kind]; } catch (e) { return null; } }
+    function rememberKeys() {
+      try { return store('localStorage')?.getItem(REMEMBER_FLAG) === '1'; } catch (e) { return false; }
     }
-    function setKey(name, value) {
+    function getKey(name) {
+      if (keyCache[name]) return keyCache[name];
+      try { return store('sessionStorage')?.getItem(name) || store('localStorage')?.getItem(name) || ''; } catch (e) { return ''; }
+    }
+    function setKey(name, value, remember) {
       keyCache[name] = value;
-      try { value ? localStorage.setItem(name, value) : localStorage.removeItem(name); } catch (e) {}
+      for (const kind of ['sessionStorage', 'localStorage']) {
+        try { store(kind)?.removeItem(name); } catch (e) {}
+      }
+      if (!value) return;
+      try { store(remember ? 'localStorage' : 'sessionStorage')?.setItem(name, value); } catch (e) {}
+    }
+
+    // 以前の版で localStorage に保存されたキーは、「記憶する」が選ばれていなければ sessionStorage へ移す
+    function migrateOldKeys() {
+      if (rememberKeys()) return;
+      KEY_NAMES.forEach(k => {
+        let v = '';
+        try { v = store('localStorage')?.getItem(k) || ''; } catch (e) {}
+        if (v) setKey(k, v, false);
+      });
     }
 
     function saveApiKeys() {
-      setKey('sb_openai_key', document.getElementById('openaiKey').value.trim());
-      setKey('sb_anthropic_key', document.getElementById('anthropicKey').value.trim());
-      setKey('sb_fal_key', document.getElementById('falKey').value.trim());
+      const remember = document.getElementById('rememberKeys').checked;
+      try { remember ? store('localStorage')?.setItem(REMEMBER_FLAG, '1') : store('localStorage')?.removeItem(REMEMBER_FLAG); } catch (e) {}
+      setKey('sb_openai_key', document.getElementById('openaiKey').value.trim(), remember);
+      setKey('sb_anthropic_key', document.getElementById('anthropicKey').value.trim(), remember);
+      setKey('sb_fal_key', document.getElementById('falKey').value.trim(), remember);
       document.getElementById('settingsPanel').classList.add('hidden');
-      alert('APIキーをこのブラウザに保存しました。');
+      alert(remember ? 'APIキーをこのブラウザに記憶しました。共用PCでは使用後に「キーを消去」してください。'
+                     : 'APIキーを設定しました（このタブを閉じると消えます）。');
     }
 
     function clearApiKeys() {
-      ['sb_openai_key', 'sb_anthropic_key', 'sb_fal_key'].forEach(k => setKey(k, ''));
+      KEY_NAMES.forEach(k => setKey(k, ''));
+      try { store('localStorage')?.removeItem(REMEMBER_FLAG); } catch (e) {}
       loadApiKeys();
       alert('保存済みのAPIキーを消去しました。');
     }
@@ -292,6 +324,7 @@
       document.getElementById('openaiKey').value = getKey('sb_openai_key');
       document.getElementById('anthropicKey').value = getKey('sb_anthropic_key');
       document.getElementById('falKey').value = getKey('sb_fal_key');
+      document.getElementById('rememberKeys').checked = rememberKeys();
     }
 
     function renderCardsGrid() {
@@ -671,8 +704,13 @@ promptのルール：
       const submit = await fetch(`https://queue.fal.run/${endpoint}`, { method: 'POST', headers, body: JSON.stringify(input) });
       const job = await submit.json();
       if (!submit.ok) throw new Error(formatFalError(job));
-      const statusUrl = job.status_url || `https://queue.fal.run/${endpoint}/requests/${job.request_id}/status`;
-      const responseUrl = job.response_url || `https://queue.fal.run/${endpoint}/requests/${job.request_id}`;
+      // キー付きの問い合わせは fal.ai のサーバーにだけ送る
+      const falUrl = (u, fallback) => {
+        try { const h = new URL(u).hostname; if (new URL(u).protocol === 'https:' && (h === 'fal.run' || h.endsWith('.fal.run'))) return u; } catch (e) {}
+        return fallback;
+      };
+      const statusUrl = falUrl(job.status_url, `https://queue.fal.run/${endpoint}/requests/${job.request_id}/status`);
+      const responseUrl = falUrl(job.response_url, `https://queue.fal.run/${endpoint}/requests/${job.request_id}`);
       const started = Date.now();
       while (true) {
         await new Promise(r => setTimeout(r, 5000));
